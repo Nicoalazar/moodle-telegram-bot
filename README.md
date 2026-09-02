@@ -15,8 +15,9 @@ src/telegram.js               armado del resumen + envío por Telegram (Fase 4)
 scripts/get-moodle-token.mjs  setup interactivo: obtiene MOODLE_TOKEN (Fase 1)
 scripts/get-telegram-chat-id.mjs  setup interactivo: obtiene TELEGRAM_CHAT_ID (Fase 1)
 scripts/list-courses.mjs      utilidad: lista tus cursos con su ID (para armar MOODLE_COURSE_IDS)
-data/state.json               estado persistido entre corridas (generado, no se versiona)
+data/state.json               estado persistido entre corridas (generado; SE versiona, ver sección de GitHub Actions)
 .env                           credenciales locales (generado, no se versiona)
+.github/workflows/moodle-check.yml  corrida diaria automática vía GitHub Actions
 ```
 
 ## Cómo se corrió esto localmente
@@ -73,33 +74,32 @@ data/state.json               estado persistido entre corridas (generado, no se 
 entorno cuando corre como Routine — `src/env.js` nunca pisa una variable que ya esté seteada
 en el entorno).
 
-## Preparar la Routine (cron diario)
+## Corrida diaria automática (GitHub Actions)
 
-La Routine necesita, como variables de entorno propias (no un archivo `.env`, ya que ese
-archivo es local y está en `.gitignore`):
+El chequeo diario corre como GitHub Actions workflow
+(`.github/workflows/moodle-check.yml`), no como Routine ni como tarea programada local —
+ambas alternativas resultaron bloqueadas en este entorno (el proxy de salida del sandbox
+rechaza la conexión a `aulasvirtuales.bue.edu.ar`, y el Task Scheduler de Windows está roto
+en la PC donde se probó). Los runners de GitHub Actions corren en una red distinta, sin ese
+bloqueo.
 
-- `MOODLE_BASE_URL`
-- `MOODLE_TOKEN`
-- `MOODLE_COURSE_IDS`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- (opcional) `DUE_SOON_DAYS`, `MOODLE_RATE_LIMIT_MS`
+Como `data/state.json` ya no está en `.gitignore`: tras cada corrida real (no dry-run) el
+workflow comitea el estado actualizado de vuelta al repo con el token por defecto
+(`GITHUB_TOKEN`, con permiso `contents: write`). Es la forma elegida de persistirlo entre
+corridas (alternativa descartada: `actions/cache`, que es best-effort y puede evictarse).
 
-Copiá los valores actuales de tu `.env` local a la configuración de variables de entorno de
-la Routine — nunca subas `.env` a un repositorio.
+### Setup
 
-### Pasos para crear la Routine
-
-1. Confirmá que `npm run dry-run` te sigue dando un resumen sensato (ya lo probamos juntos).
-2. Si la Routine requiere que el código esté en un repositorio Git (este directorio hoy
-   **no** es un repo git), avisame y lo inicializamos — asegurándonos de que `.env` y
-   `data/state.json` queden fuera del repo (ya están en `.gitignore`).
-3. Invocá el skill de scheduling (`/schedule` en Claude Code) y pedí crear una Routine con:
-   - **Comando**: `node index.js`
-   - **Directorio de trabajo**: esta carpeta del proyecto
-   - **Cron**: diario, por ejemplo `0 8 * * *` (8:00 AM) — ajustá el horario a tu gusto
-   - **Variables de entorno**: las listadas arriba
-4. Después de crearla, pedile una corrida manual (no programada) para confirmar que en ese
-   entorno también funciona antes de dejarla en piloto automático.
-
-Cuando quieras, te ayudo a ejecutar el paso 3 directamente.
+1. En GitHub → Settings → Secrets and variables → Actions, cargá estos repository secrets
+   (mismos valores que tu `.env` local):
+   - `MOODLE_BASE_URL`, `MOODLE_TOKEN`, `MOODLE_COURSE_IDS`
+   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+   - (opcional) `DUE_SOON_DAYS`, `MOODLE_RATE_LIMIT_MS`, `FORUM_IGNORE_PATTERN`
+2. Pusheá `.github/workflows/moodle-check.yml` al repo.
+3. Probá primero a mano: Actions → "Chequeo de Moodle" → Run workflow, con `dry_run` en
+   `true` (default). Confirmá en los logs que conecta a Moodle y arma el resumen — esto
+   valida que la red de GitHub Actions sí llega a la instancia (a diferencia del sandbox).
+4. Si el dry-run funciona, corré el workflow una vez más con `dry_run` en `false` para
+   confirmar el envío real a Telegram y el commit de `data/state.json`.
+5. De ahí en adelante corre solo todos los días a las 08:00 (Argentina) vía el `schedule`
+   del workflow (cron `0 11 * * *`, en UTC).

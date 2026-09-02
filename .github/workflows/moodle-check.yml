@@ -1,0 +1,57 @@
+name: Chequeo de Moodle
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run (no manda a Telegram ni actualiza el estado)"
+        type: boolean
+        default: true
+  schedule:
+    # 11:00 UTC = 08:00 en Argentina (UTC-3, sin horario de verano)
+    - cron: "0 11 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: moodle-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - run: npm ci
+
+      - name: Correr chequeo
+        env:
+          MOODLE_BASE_URL: ${{ secrets.MOODLE_BASE_URL }}
+          MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
+          MOODLE_COURSE_IDS: ${{ secrets.MOODLE_COURSE_IDS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DUE_SOON_DAYS: ${{ secrets.DUE_SOON_DAYS }}
+          MOODLE_RATE_LIMIT_MS: ${{ secrets.MOODLE_RATE_LIMIT_MS }}
+          FORUM_IGNORE_PATTERN: ${{ secrets.FORUM_IGNORE_PATTERN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm run dry-run
+          else
+            npm start
+          fi
+
+      - name: Commitear estado actualizado
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/state.json
+          git diff --cached --quiet || git commit -m "Actualiza estado tras chequeo [skip ci]"
+          git push
