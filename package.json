@@ -1,0 +1,17 @@
+{
+  "name": "moodle-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chequea novedades en Moodle (aula virtual) y avisa por Telegram.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "setup:moodle-token": "node scripts/get-moodle-token.mjs",
+    "setup:telegram-chat-id": "node scripts/get-telegram-chat-id.mjs",
+    "list-courses": "node scripts/list-courses.mjs",
+    "start": "node index.js",
+    "dry-run": "node index.js --dry-run"
+  }
+}
