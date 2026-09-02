@@ -50,6 +50,10 @@ jobs:
       - name: Commitear estado actualizado
         if: always()
         run: |
+          if [ ! -f data/state.json ]; then
+            echo "No existe data/state.json (no hubo corrida real todavía), nada que commitear."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/state.json
