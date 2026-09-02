@@ -74,9 +74,9 @@ data/state.json               estado persistido entre corridas (generado; SE ver
 entorno cuando corre como Routine — `src/env.js` nunca pisa una variable que ya esté seteada
 en el entorno).
 
-## Corrida diaria automática (GitHub Actions)
+## Corrida automática (GitHub Actions)
 
-El chequeo diario corre como GitHub Actions workflow
+El chequeo corre como GitHub Actions workflow
 (`.github/workflows/moodle-check.yml`), no como Routine ni como tarea programada local —
 ambas alternativas resultaron bloqueadas en este entorno (el proxy de salida del sandbox
 rechaza la conexión a `aulasvirtuales.bue.edu.ar`, y el Task Scheduler de Windows está roto
@@ -88,18 +88,21 @@ workflow comitea el estado actualizado de vuelta al repo con el token por defect
 (`GITHUB_TOKEN`, con permiso `contents: write`). Es la forma elegida de persistirlo entre
 corridas (alternativa descartada: `actions/cache`, que es best-effort y puede evictarse).
 
-### Setup
+**Estado: en producción.** Se probó a mano con `dry_run` en `true` (confirmó que la red de
+GitHub Actions llega a Moodle) y después con `dry_run` en `false` (llegó el mensaje real por
+Telegram y quedó commiteado `data/state.json`). Desde ahí corre solo lunes y viernes a las
+08:00 (Argentina) vía el `schedule` del workflow (cron `0 11 * * 1,5`, en UTC) — no hace falta
+tocar nada más.
 
-1. En GitHub → Settings → Secrets and variables → Actions, cargá estos repository secrets
-   (mismos valores que tu `.env` local):
-   - `MOODLE_BASE_URL`, `MOODLE_TOKEN`, `MOODLE_COURSE_IDS`
-   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-   - (opcional) `DUE_SOON_DAYS`, `MOODLE_RATE_LIMIT_MS`, `FORUM_IGNORE_PATTERN`
-2. Pusheá `.github/workflows/moodle-check.yml` al repo.
-3. Probá primero a mano: Actions → "Chequeo de Moodle" → Run workflow, con `dry_run` en
-   `true` (default). Confirmá en los logs que conecta a Moodle y arma el resumen — esto
-   valida que la red de GitHub Actions sí llega a la instancia (a diferencia del sandbox).
-4. Si el dry-run funciona, corré el workflow una vez más con `dry_run` en `false` para
-   confirmar el envío real a Telegram y el commit de `data/state.json`.
-5. De ahí en adelante corre solo todos los días a las 08:00 (Argentina) vía el `schedule`
-   del workflow (cron `0 11 * * *`, en UTC).
+### Setup (referencia, ya hecho en este repo)
+
+1. Repository secrets en GitHub → Settings → Secrets and variables → Actions (mismos valores
+   que tu `.env` local): `MOODLE_BASE_URL`, `MOODLE_TOKEN`, `MOODLE_COURSE_IDS`,
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y, opcionalmente, `DUE_SOON_DAYS`,
+   `MOODLE_RATE_LIMIT_MS`, `FORUM_IGNORE_PATTERN`.
+2. Settings → Actions → General → "Workflow permissions" en **"Read and write permissions"**
+   (necesario para que el workflow pueda commitear `data/state.json` de vuelta al repo).
+
+Si en algún momento hay que rotar `MOODLE_TOKEN` o `TELEGRAM_BOT_TOKEN`, o cambiar
+`MOODLE_COURSE_IDS`, se actualiza el secret correspondiente y ya — no requiere tocar el
+workflow.
