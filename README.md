@@ -1,119 +1,183 @@
-# Moodle → Telegram: aviso de novedades del aula virtual
+# Aviso de novedades de tu aula virtual (Moodle → Telegram / ntfy)
 
-Chequea las materias indicadas en tu Moodle (`https://aulasvirtuales.bue.edu.ar`), detecta
-qué es genuinamente nuevo desde la última corrida (contenido, tareas, vencimientos próximos)
-y te manda un resumen por Telegram. Sin frameworks: Node.js 18+ con `fetch` nativo.
+Bot que revisa tus materias en Moodle y te avisa automáticamente cuando hay algo nuevo:
+contenido, tareas, notas, actividad en foros y vencimientos próximos. Corre solo, todos los
+días, sin que tengas que entrar a Moodle a revisar nada. Gratis y sin servidores propios
+(usa GitHub Actions). No hace falta saber programar — todos los pasos son comandos para
+copiar y pegar en una terminal.
 
-## Estructura
+## Antes de empezar
 
+- Tu usuario y contraseña de Moodle de tu facultad/instituto.
+- [Node.js](https://nodejs.org) 18 o superior instalado.
+- [Git](https://git-scm.com/) instalado.
+- Una cuenta de [GitHub](https://github.com) (gratis) — para que el chequeo corra solo,
+  todos los días, sin que tengas que prender tu computadora.
+- Telegram, **o** el celular con la app [ntfy](https://ntfy.sh) — elegís uno de los dos
+  (o los dos) para recibir los avisos.
+
+> Esto funciona con cualquier Moodle que tenga habilitado el "Web Service" que usa la app
+> móvil oficial — la gran mayoría de las instituciones lo tiene activado, porque si no,
+> tampoco funcionaría la app de Moodle en el celular.
+
+## Instalación (una sola vez)
+
+### 1. Conseguí tu copia del proyecto
+
+```bash
+git clone https://github.com/Nicoalazar/moodle-telegram-bot
+cd moodle-telegram-bot
+npm install
 ```
-index.js                      orquestación completa (Fase 5)
-src/env.js                    lee/escribe .env (sin dependencias externas)
-src/moodleClient.js           cliente REST de Moodle (Fase 2)
-src/state.js                  lectura/escritura de estado + cálculo de "qué es nuevo" (Fase 3)
-src/telegram.js               armado del resumen + envío por Telegram (Fase 4)
-scripts/get-moodle-token.mjs  setup interactivo: obtiene MOODLE_TOKEN (Fase 1)
-scripts/get-telegram-chat-id.mjs  setup interactivo: obtiene TELEGRAM_CHAT_ID (Fase 1)
-scripts/list-courses.mjs      utilidad: lista tus cursos con su ID (para armar MOODLE_COURSE_IDS)
-data/state.json               estado persistido entre corridas (generado; SE versiona, ver sección de GitHub Actions)
-.env                           credenciales locales (generado, no se versiona)
-.github/workflows/moodle-check.yml  corrida diaria automática vía GitHub Actions
+
+### 2. Conectá tu cuenta de Moodle
+
+```bash
+npm run setup:moodle-token
 ```
 
-## Cómo se corrió esto localmente
+Te va a pedir la URL de tu aula virtual (ej. `https://aulasvirtuales.tufacultad.edu.ar`) y
+tu usuario y contraseña. La contraseña se escribe oculta (con `*`) y **nunca se guarda en
+ningún archivo** — se usa una sola vez para pedirle un token a Moodle, y ese token (no tu
+contraseña) es lo que queda guardado en un archivo `.env` en tu computadora.
 
-1. **Setup inicial** (una sola vez, interactivo, en tu propia terminal):
+> Si te da un error de "servicio no habilitado" o similar, escribile al área de
+> sistemas/soporte de tu facultad — puede que ese servicio esté desactivado.
 
+### 3. Elegí qué materias querés que se revisen
+
+```bash
+npm run list-courses
+```
+
+Te muestra todas tus materias con su ID. Copiá los IDs que te interesen (separados por
+coma) y pegalos en el archivo `.env`, en la línea `MOODLE_COURSE_IDS=`.
+
+### 4. Elegí cómo querés recibir los avisos
+
+**Opción A — Telegram** (si ya lo usás a diario):
+
+1. En Telegram, buscá **@BotFather** y mandale `/newbot`. Elegí un nombre y un usuario para
+   tu bot (debe terminar en "bot", ej. `mi_aula_bot`).
+2. Copiá el token que te devuelve.
+3. Buscá tu bot recién creado y mandale cualquier mensaje (ej. "hola").
+4. Corré:
    ```bash
-   node scripts/get-moodle-token.mjs
-   node scripts/get-telegram-chat-id.mjs
+   npm run setup:telegram-chat-id
    ```
+   Te pide el token del bot y detecta tu chat automáticamente.
 
-   El primero pide usuario/contraseña de Moodle (la contraseña se enmascara y **nunca se
-   guarda en ningún archivo**) y guarda `MOODLE_BASE_URL` + `MOODLE_TOKEN` en `.env`. El
-   segundo pide el token del bot de Telegram (creado antes con `@BotFather`) y detecta tu
-   `chat_id` automáticamente.
+**Opción B — ntfy** (más simple, no requiere crear nada ni ninguna cuenta):
 
-2. **Elegir qué materias monitorear**: correr `npm run list-courses` para ver todos tus
-   cursos con su ID, y guardar los que te interesen en `.env` como `MOODLE_COURSE_IDS`
-   (separados por coma).
-
-3. **Probar sin mandar nada real**:
-
-   ```bash
-   npm run dry-run
+1. Instalá la app [ntfy](https://ntfy.sh/docs/subscribe/phone/) en tu celular, o abrí
+   [ntfy.sh](https://ntfy.sh) desde el navegador.
+2. Pensá un nombre de "topic" único que nadie más vaya a adivinar (cualquiera que lo
+   conozca puede ver tus avisos), por ejemplo `aula-tunombre-1234`.
+3. Suscribite a ese nombre desde la app (botón "+").
+4. Abrí tu archivo `.env` y agregá:
    ```
-
-   Imprime por consola el resumen que se mandaría, sin tocar Telegram ni `data/state.json`.
-
-4. **Correr de verdad** (manda el mensaje y actualiza el estado, solo si el envío fue exitoso):
-
-   ```bash
-   npm start
+   NOTIFY_CHANNELS=ntfy
+   NTFY_TOPIC_URL=https://ntfy.sh/aula-tunombre-1234
    ```
+   (reemplazando por el nombre que elegiste en el paso 2)
 
-> Nota sobre la primera corrida: la primera vez que se procesa una materia se toma como
-> "línea base" — no se listan sus módulos/tareas existentes como si fueran nuevos (para no
-> spamear con todo el contenido histórico), pero sí se avisan los vencimientos próximos,
-> porque son sensibles al tiempo. De ahí en adelante, cada corrida solo reporta novedades
-> reales.
+¿Querés los dos a la vez? `NOTIFY_CHANNELS=telegram,ntfy` (con las variables de ambos
+configuradas).
+
+### 5. Probalo sin mandar nada real
+
+```bash
+npm run dry-run
+```
+
+Muestra por pantalla exactamente lo que te mandaría, sin enviar ningún mensaje. Revisá que
+las materias y el resumen tengan sentido antes de seguir.
+
+### 6. Mandá el primer aviso de verdad
+
+```bash
+npm start
+```
+
+> **La primera corrida no te avisa sobre todo lo que ya existe en tus materias** (así no te
+> inunda con el contenido histórico apenas empezás) — solo avisa vencimientos que estén
+> próximos. De la segunda corrida en adelante, vas a recibir solo lo genuinamente nuevo.
+
+## Automatizarlo (para que corra solo, todos los días)
+
+Para no tener que acordarte de correrlo vos, se programa con **GitHub Actions** (gratis,
+corre en los servidores de GitHub — tu computadora puede estar apagada).
+
+1. Subí tu copia del proyecto a un repositorio de GitHub propio, marcado como **privado**
+   (tiene tu configuración de materias, aunque no tus contraseñas).
+2. En ese repositorio: **Settings → Secrets and variables → Actions → New repository
+   secret**, y cargá ahí los mismos valores que tenés en tu `.env` local: `MOODLE_BASE_URL`,
+   `MOODLE_TOKEN`, `MOODLE_COURSE_IDS`, y según el canal que elegiste, `TELEGRAM_BOT_TOKEN` +
+   `TELEGRAM_CHAT_ID` y/o `NOTIFY_CHANNELS` + `NTFY_TOPIC_URL`.
+3. **Settings → Actions → General → Workflow permissions**, elegí **"Read and write
+   permissions"** (así el workflow puede guardar su propio progreso entre corridas).
+4. Listo — el workflow ya viene armado (`.github/workflows/moodle-check.yml`), corriendo
+   automáticamente lunes y viernes a las 8:17 AM (hora Argentina; ajustable, ver más abajo).
+   Para probarlo sin esperar: pestaña **Actions** del repo → "Chequeo de Moodle" →
+   **Run workflow**.
+
+## Problemas comunes
+
+| Síntoma | Causa probable | Qué hacer |
+|---|---|---|
+| "Web services are not enabled" al pedir el token | Tu facultad no tiene habilitado el servicio para apps móviles | Consultá con el área de sistemas/IT de tu institución |
+| No me llega nada por Telegram | No le mandaste un mensaje al bot antes de correr `setup:telegram-chat-id` | Mandale un mensaje al bot y volvé a correr ese script |
+| No me llega nada por ntfy | No te suscribiste al topic, o el nombre no coincide exactamente | Revisá que el nombre en la app sea idéntico al de `NTFY_TOPIC_URL` |
+| El workflow de GitHub Actions no corrió a la hora esperada | Los cron de GitHub pueden demorarse (rara vez, hasta varias horas) en momentos de mucha carga en la plataforma | Es ocasional y esperable; podés dispararlo a mano desde la pestaña Actions mientras tanto |
+| Avisa algo que ya vi o completé | Puede pasar la primera vez que se agrega una categoría nueva de avisos (ej. foros o notas) sobre un `state.json` que ya existía de antes | Es un aviso único, no se repite en la corrida siguiente |
 
 ## Variables de entorno
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
-| `MOODLE_BASE_URL` | Sí | URL base del aula virtual, ej. `https://aulasvirtuales.bue.edu.ar` |
-| `MOODLE_TOKEN` | Sí | Token del Web Service API (servicio `moodle_mobile_app`) |
-| `MOODLE_COURSE_IDS` | Sí | IDs de curso a monitorear, separados por coma |
+| `MOODLE_BASE_URL` | Sí | URL base de tu aula virtual |
+| `MOODLE_TOKEN` | Sí | Token del Web Service de Moodle (lo genera `npm run setup:moodle-token`) |
+| `MOODLE_COURSE_IDS` | Sí | IDs de las materias a monitorear, separados por coma |
 | `NOTIFY_CHANNELS` | No (default `telegram`) | `telegram`, `ntfy`, o `telegram,ntfy` para ambos |
-| `TELEGRAM_BOT_TOKEN` | Sí si `NOTIFY_CHANNELS` incluye `telegram` (salvo `--dry-run`) | Token del bot, de `@BotFather` |
-| `TELEGRAM_CHAT_ID` | Sí si `NOTIFY_CHANNELS` incluye `telegram` (salvo `--dry-run`) | Chat al que se manda el resumen |
-| `NTFY_TOPIC_URL` | Sí si `NOTIFY_CHANNELS` incluye `ntfy` (salvo `--dry-run`) | URL de tu topic en ntfy.sh, ej. `https://ntfy.sh/tu-topic-unico` |
-| `DUE_SOON_DAYS` | No (default `3`) | Ventana en días para avisar "vence pronto" |
-| `MOODLE_RATE_LIMIT_MS` | No (default `400`) | Pausa entre llamadas por-curso a la API de Moodle |
-
-### Alternativa experimental: ntfy.sh (rama `feature/ntfy-notifications`)
-
-[ntfy.sh](https://ntfy.sh) es un canal de notificaciones push que no requiere cuenta ni
-token: elegís un nombre de "topic" único (ej. `https://ntfy.sh/aula-tunombre-1234`, no
-adivinable por otros), lo poner en `NTFY_TOPIC_URL`, y te suscribís desde la
-[app](https://ntfy.sh/docs/subscribe/phone/) o el navegador. Poné `NOTIFY_CHANNELS=ntfy` (o
-`telegram,ntfy` para mandar por los dos) en `.env`. Implementado en `src/ntfy.js`, en paralelo
-a `telegram.js` — no reemplaza nada de lo existente en `master`.
+| `TELEGRAM_BOT_TOKEN` | Sí si usás `telegram` (salvo `--dry-run`) | Token del bot, de `@BotFather` |
+| `TELEGRAM_CHAT_ID` | Sí si usás `telegram` (salvo `--dry-run`) | Chat al que se manda el resumen |
+| `NTFY_TOPIC_URL` | Sí si usás `ntfy` (salvo `--dry-run`) | URL de tu topic en ntfy.sh |
+| `DUE_SOON_DAYS` | No (default `7`) | Ventana en días para avisar "vence pronto" |
+| `MOODLE_RATE_LIMIT_MS` | No (default `400`) | Pausa entre llamadas por-curso/por-foro a la API de Moodle |
+| `FORUM_IGNORE_PATTERN` | No | Regex (case-insensitive) de nombres de foro a NO rastrear — default excluye foros de "oficina/grupo" de comisiones ajenas |
 
 `index.js` lee estas variables de `process.env` (vía `.env` en local, o directamente del
-entorno cuando corre como Routine — `src/env.js` nunca pisa una variable que ya esté seteada
-en el entorno).
+entorno en GitHub Actions vía Secrets — nunca se sobreescribe una variable que ya esté
+seteada en el entorno).
 
-## Corrida automática (GitHub Actions)
+## Estructura del proyecto
 
-El chequeo corre como GitHub Actions workflow
-(`.github/workflows/moodle-check.yml`), no como Routine ni como tarea programada local —
-ambas alternativas resultaron bloqueadas en este entorno (el proxy de salida del sandbox
-rechaza la conexión a `aulasvirtuales.bue.edu.ar`, y el Task Scheduler de Windows está roto
-en la PC donde se probó). Los runners de GitHub Actions corren en una red distinta, sin ese
-bloqueo.
+```
+index.js                             orquestación completa: junta todo y decide qué avisar
+src/env.js                           lee/escribe .env (sin dependencias externas)
+src/moodleClient.js                  cliente REST de Moodle
+src/state.js                         guarda qué ya viste y calcula qué es genuinamente nuevo
+src/telegram.js                      arma el resumen y lo manda por Telegram
+src/ntfy.js                          arma el resumen y lo manda por ntfy
+scripts/get-moodle-token.mjs         setup interactivo: obtiene tu MOODLE_TOKEN
+scripts/get-telegram-chat-id.mjs     setup interactivo: obtiene tu TELEGRAM_CHAT_ID
+scripts/list-courses.mjs             utilidad: lista tus materias con su ID
+data/state.json                      qué ya se avisó (se versiona, ver sección de GitHub Actions)
+.env                                 tus credenciales locales (generado, NO se versiona)
+.github/workflows/moodle-check.yml   corrida automática vía GitHub Actions
+```
 
-Como `data/state.json` ya no está en `.gitignore`: tras cada corrida real (no dry-run) el
-workflow comitea el estado actualizado de vuelta al repo con el token por defecto
-(`GITHUB_TOKEN`, con permiso `contents: write`). Es la forma elegida de persistirlo entre
-corridas (alternativa descartada: `actions/cache`, que es best-effort y puede evictarse).
+## Notas técnicas (para quien quiera tocar el código)
 
-**Estado: en producción.** Se probó a mano con `dry_run` en `true` (confirmó que la red de
-GitHub Actions llega a Moodle) y después con `dry_run` en `false` (llegó el mensaje real por
-Telegram y quedó commiteado `data/state.json`). Desde ahí corre solo lunes y viernes a las
-08:00 (Argentina) vía el `schedule` del workflow (cron `0 11 * * 1,5`, en UTC) — no hace falta
-tocar nada más.
-
-### Setup (referencia, ya hecho en este repo)
-
-1. Repository secrets en GitHub → Settings → Secrets and variables → Actions (mismos valores
-   que tu `.env` local): `MOODLE_BASE_URL`, `MOODLE_TOKEN`, `MOODLE_COURSE_IDS`,
-   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y, opcionalmente, `DUE_SOON_DAYS`,
-   `MOODLE_RATE_LIMIT_MS`, `FORUM_IGNORE_PATTERN`.
-2. Settings → Actions → General → "Workflow permissions" en **"Read and write permissions"**
-   (necesario para que el workflow pueda commitear `data/state.json` de vuelta al repo).
-
-Si en algún momento hay que rotar `MOODLE_TOKEN` o `TELEGRAM_BOT_TOKEN`, o cambiar
-`MOODLE_COURSE_IDS`, se actualiza el secret correspondiente y ya — no requiere tocar el
-workflow.
+- **Por qué GitHub Actions y no un cron local o una nube externa**: no depende de que tu
+  computadora esté prendida, y corre en una red sin restricciones de salida hacia Moodle.
+- **Cómo persiste el estado entre corridas**: como cada corrida de GitHub Actions arranca de
+  cero, `data/state.json` **sí** se versiona (a diferencia de un uso 100% local), y el
+  workflow lo comitea de vuelta al repo al final de cada corrida real (con reintento
+  automático si choca con otro push concurrente).
+- **Horario del cron**: a propósito no está en punto (`17 11 * * 1,5`, no `0 11 * * 1,5`) —
+  los cron en punto compiten con muchísimos workflows de toda la plataforma agendados a la
+  misma hora, y GitHub puede llegar a descartar el disparo en vez de solo demorarlo.
+- **Primera corrida por materia**: no lista módulos/tareas ya existentes como "nuevos" (para
+  no volcar todo el historial), salvo vencimientos próximos, que sí avisa siempre por ser
+  sensibles al tiempo.
