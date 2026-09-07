@@ -65,10 +65,21 @@ data/state.json               estado persistido entre corridas (generado; SE ver
 | `MOODLE_BASE_URL` | Sí | URL base del aula virtual, ej. `https://aulasvirtuales.bue.edu.ar` |
 | `MOODLE_TOKEN` | Sí | Token del Web Service API (servicio `moodle_mobile_app`) |
 | `MOODLE_COURSE_IDS` | Sí | IDs de curso a monitorear, separados por coma |
-| `TELEGRAM_BOT_TOKEN` | Sí (salvo `--dry-run`) | Token del bot, de `@BotFather` |
-| `TELEGRAM_CHAT_ID` | Sí (salvo `--dry-run`) | Chat al que se manda el resumen |
+| `NOTIFY_CHANNELS` | No (default `telegram`) | `telegram`, `ntfy`, o `telegram,ntfy` para ambos |
+| `TELEGRAM_BOT_TOKEN` | Sí si `NOTIFY_CHANNELS` incluye `telegram` (salvo `--dry-run`) | Token del bot, de `@BotFather` |
+| `TELEGRAM_CHAT_ID` | Sí si `NOTIFY_CHANNELS` incluye `telegram` (salvo `--dry-run`) | Chat al que se manda el resumen |
+| `NTFY_TOPIC_URL` | Sí si `NOTIFY_CHANNELS` incluye `ntfy` (salvo `--dry-run`) | URL de tu topic en ntfy.sh, ej. `https://ntfy.sh/tu-topic-unico` |
 | `DUE_SOON_DAYS` | No (default `3`) | Ventana en días para avisar "vence pronto" |
 | `MOODLE_RATE_LIMIT_MS` | No (default `400`) | Pausa entre llamadas por-curso a la API de Moodle |
+
+### Alternativa experimental: ntfy.sh (rama `feature/ntfy-notifications`)
+
+[ntfy.sh](https://ntfy.sh) es un canal de notificaciones push que no requiere cuenta ni
+token: elegís un nombre de "topic" único (ej. `https://ntfy.sh/aula-tunombre-1234`, no
+adivinable por otros), lo poner en `NTFY_TOPIC_URL`, y te suscribís desde la
+[app](https://ntfy.sh/docs/subscribe/phone/) o el navegador. Poné `NOTIFY_CHANNELS=ntfy` (o
+`telegram,ntfy` para mandar por los dos) en `.env`. Implementado en `src/ntfy.js`, en paralelo
+a `telegram.js` — no reemplaza nada de lo existente en `master`.
 
 `index.js` lee estas variables de `process.env` (vía `.env` en local, o directamente del
 entorno cuando corre como Routine — `src/env.js` nunca pisa una variable que ya esté seteada

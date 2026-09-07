@@ -3,6 +3,7 @@ import { loadEnv } from './src/env.js';
 import { createMoodleClient } from './src/moodleClient.js';
 import { loadState, saveState, diffCourse, applyCourseDiff, isModuleVisible, isSectionVisible } from './src/state.js';
 import { buildSummaryMessages, sendSummary } from './src/telegram.js';
+import { buildNtfySummary, sendNtfyMessage } from './src/ntfy.js';
 
 loadEnv();
 
@@ -30,9 +31,22 @@ async function main() {
   const token = requireEnv('MOODLE_TOKEN');
   const courseIds = parseCourseIds(requireEnv('MOODLE_COURSE_IDS'));
 
-  // En dry-run no hace falta tener credenciales de Telegram configuradas.
-  const botToken = DRY_RUN ? process.env.TELEGRAM_BOT_TOKEN : requireEnv('TELEGRAM_BOT_TOKEN');
-  const chatId = DRY_RUN ? process.env.TELEGRAM_CHAT_ID : requireEnv('TELEGRAM_CHAT_ID');
+  // Canales de notificación a usar: "telegram", "ntfy", o "telegram,ntfy" para ambos.
+  const notifyChannels = (process.env.NOTIFY_CHANNELS ?? 'telegram')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const useTelegram = notifyChannels.includes('telegram');
+  const useNtfy = notifyChannels.includes('ntfy');
+  if (!useTelegram && !useNtfy) {
+    console.error(`NOTIFY_CHANNELS no tiene ningún canal válido ("${notifyChannels.join(',')}"). Usá "telegram" y/o "ntfy".`);
+    process.exit(1);
+  }
+
+  // En dry-run no hace falta tener las credenciales del canal configuradas.
+  const botToken = useTelegram && !DRY_RUN ? requireEnv('TELEGRAM_BOT_TOKEN') : process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = useTelegram && !DRY_RUN ? requireEnv('TELEGRAM_CHAT_ID') : process.env.TELEGRAM_CHAT_ID;
+  const ntfyTopicUrl = useNtfy && !DRY_RUN ? requireEnv('NTFY_TOPIC_URL') : process.env.NTFY_TOPIC_URL;
 
   const dueSoonDays = Number(process.env.DUE_SOON_DAYS ?? '7');
   const dueSoonMs = dueSoonDays * 24 * 60 * 60 * 1000;
@@ -173,23 +187,38 @@ async function main() {
     );
   }
 
-  const messages = buildSummaryMessages(diffs, { noNewsMessage: 'No hay nada nuevo, disfrutá la vida' });
+  const noNewsMessage = 'No hay nada nuevo, disfrutá la vida';
+  const telegramMessages = useTelegram ? buildSummaryMessages(diffs, { noNewsMessage }) : null;
+  const ntfySummary = useNtfy ? buildNtfySummary(diffs, { noNewsMessage }) : null;
 
   if (DRY_RUN) {
-    console.log('\n=== DRY RUN: esto es lo que se mandaría por Telegram ===\n');
-    messages.forEach((text, i) => {
-      console.log(`--- mensaje ${i + 1}/${messages.length} ---`);
-      console.log(text);
-      console.log();
-    });
-    console.log('(No se envió nada a Telegram ni se actualizó data/state.json — es un dry-run)');
+    console.log(`\n=== DRY RUN: esto es lo que se mandaría (canales: ${notifyChannels.join(', ')}) ===\n`);
+    if (useTelegram) {
+      console.log(`--- Telegram (${telegramMessages.length} mensaje/s) ---`);
+      telegramMessages.forEach((text, i) => console.log(`[${i + 1}] ${text}\n`));
+    }
+    if (useNtfy) {
+      console.log(`--- ntfy ---\nTítulo: ${ntfySummary.title}\n${ntfySummary.message}\n`);
+    }
+    console.log('(No se envió nada ni se actualizó data/state.json — es un dry-run)');
     return;
   }
 
+  const sentTo = [];
   try {
-    await sendSummary({ botToken, chatId, messages });
+    if (useTelegram) {
+      await sendSummary({ botToken, chatId, messages: telegramMessages });
+      sentTo.push('telegram');
+    }
+    if (useNtfy) {
+      await sendNtfyMessage({ topicUrl: ntfyTopicUrl, title: ntfySummary.title, message: ntfySummary.message });
+      sentTo.push('ntfy');
+    }
   } catch (err) {
-    console.error('Error enviando a Telegram. NO se actualiza el estado (para no perder novedades):', err.message);
+    console.error(
+      `Error enviando notificación (canales enviados con éxito antes del error: ${sentTo.join(', ') || 'ninguno'}). NO se actualiza el estado (para no perder novedades):`,
+      err.message,
+    );
     process.exit(1);
   }
 
@@ -197,7 +226,7 @@ async function main() {
     state.courses[diff.courseId] = applyCourseDiff(diff, state.courses[diff.courseId] ?? null);
   }
   saveState(state);
-  console.log('Listo: resumen enviado por Telegram y estado actualizado.');
+  console.log(`Listo: resumen enviado (${sentTo.join(', ')}) y estado actualizado.`);
 }
 
 main().catch((err) => {
