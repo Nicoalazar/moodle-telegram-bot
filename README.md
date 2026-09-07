@@ -162,7 +162,7 @@ src/ntfy.js                          arma el resumen y lo manda por ntfy
 scripts/get-moodle-token.mjs         setup interactivo: obtiene tu MOODLE_TOKEN
 scripts/get-telegram-chat-id.mjs     setup interactivo: obtiene tu TELEGRAM_CHAT_ID
 scripts/list-courses.mjs             utilidad: lista tus materias con su ID
-data/state.json                      qué ya se avisó (se versiona, ver sección de GitHub Actions)
+data/state.json                      qué ya se avisó (local; en GitHub Actions vive en la caché, nunca en el repo)
 .env                                 tus credenciales locales (generado, NO se versiona)
 .github/workflows/moodle-check.yml   corrida automática vía GitHub Actions
 ```
@@ -172,9 +172,10 @@ data/state.json                      qué ya se avisó (se versiona, ver secció
 - **Por qué GitHub Actions y no un cron local o una nube externa**: no depende de que tu
   computadora esté prendida, y corre en una red sin restricciones de salida hacia Moodle.
 - **Cómo persiste el estado entre corridas**: como cada corrida de GitHub Actions arranca de
-  cero, `data/state.json` **sí** se versiona (a diferencia de un uso 100% local), y el
-  workflow lo comitea de vuelta al repo al final de cada corrida real (con reintento
-  automático si choca con otro push concurrente).
+  cero, `data/state.json` se guarda en la **caché de Actions** (`actions/cache`) entre
+  corridas — nunca se commitea al repo, porque podría contener notas o actividad real del
+  alumno. La caché no es 100% garantizada (se pierde si no se usa en 7 días), pero el
+  código ya maneja bien un estado perdido: vuelve a tomar línea de base sin spamear.
 - **Horario del cron**: a propósito no está en punto (`17 11 * * 1,5`, no `0 11 * * 1,5`) —
   los cron en punto compiten con muchísimos workflows de toda la plataforma agendados a la
   misma hora, y GitHub puede llegar a descartar el disparo en vez de solo demorarlo.

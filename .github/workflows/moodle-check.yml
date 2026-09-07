@@ -15,7 +15,7 @@ on:
     - cron: "17 11 * * 1,5"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: moodle-check
@@ -32,6 +32,20 @@ jobs:
           node-version: "18"
 
       - run: npm ci
+
+      # data/state.json NUNCA se commitea al repo (podría contener notas/actividad real
+      # del alumno). Se persiste en la caché de Actions entre corridas: el restore agarra
+      # la entrada más reciente con prefijo "moodle-state-" (la key exacta con run_id nunca
+      # matchea a propósito, así siempre cae al restore-keys). El save de más abajo crea una
+      # entrada nueva con key única por run — es el patrón recomendado por GitHub para
+      # cachés que se actualizan en cada corrida.
+      - name: Restaurar estado (caché)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/state.json
+          key: moodle-state-${{ github.run_id }}
+          restore-keys: |
+            moodle-state-
 
       - name: Correr chequeo
         env:
@@ -50,28 +64,9 @@ jobs:
             npm start
           fi
 
-      - name: Commitear estado actualizado
+      - name: Guardar estado (caché)
         if: always()
-        run: |
-          if [ ! -f data/state.json ]; then
-            echo "No existe data/state.json (no hubo corrida real todavía), nada que commitear."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/state.json
-          git diff --cached --quiet || git commit -m "Actualiza estado tras chequeo [skip ci]"
-
-          # Reintenta el push si otro push (nuestro o de otra corrida concurrente) llegó
-          # primero a master: rebasea sobre el remoto actualizado y reintenta.
-          for i in 1 2 3 4 5; do
-            if git push; then
-              exit 0
-            fi
-            echo "Push rechazado (intento $i/5), rebaseando sobre origin/master y reintentando..."
-            git fetch origin master
-            git rebase origin/master
-            sleep $((RANDOM % 5 + 1))
-          done
-          echo "No se pudo pushear el estado actualizado tras varios intentos."
-          exit 1
+        uses: actions/cache/save@v4
+        with:
+          path: data/state.json
+          key: moodle-state-${{ github.run_id }}
